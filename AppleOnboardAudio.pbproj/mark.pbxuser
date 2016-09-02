@@ -53,12 +53,12 @@
 			PBXWorkspaceConfiguration = {
 				ContentSize = "{1275, 975}";
 				LeftSlideOut = {
-					ActiveTab = 3;
+					ActiveTab = 0;
 					Frame = "{{0, 23}, {1275, 952}}";
 					Split0 = {
-						Frame = "{{225, 0}, {1050, 952}}";
+						Frame = "{{341, 0}, {934, 952}}";
 						Split0 = {
-							Frame = "{{0, 25}, {1050, 927}}";
+							Frame = "{{0, 25}, {934, 927}}";
 						};
 						SplitCount = 1;
 						Tab0 = {
@@ -142,6 +142,12 @@
 		activeExec = 0;
 	};
 	AD440DB0017FA6A304CE15E3 = {
+		activeExec = 0;
+	};
+	C5A7C7FB0270994A05CD254B = {
+		activeExec = 0;
+	};
+	C5A7C80A027099CE05CD254B = {
 		activeExec = 0;
 	};
 	F629065201B2B55301CE1662 = {

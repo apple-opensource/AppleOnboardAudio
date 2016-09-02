@@ -82,12 +82,12 @@ protected:
     bool						gCanPollSatus;
 
 public:
-        //Classical Unix function
+	// Classical Unix function
     virtual bool init(OSDictionary *properties);
     virtual void free();
     virtual IOService* probe(IOService *provider, SInt32*);
 
-        //IOAudioDevice subclass
+	// IOAudioDevice subclass
     virtual bool initHardware(IOService *provider);
         
 protected:    
@@ -108,7 +108,7 @@ public:
 	virtual IOReturn setModemSound(bool state);
 protected:    
 
-            //activation functions
+	// activation functions
     UInt32	sndHWGetActiveOutputExclusive(void);
     IOReturn   	sndHWSetActiveOutputExclusive(UInt32 outputPort );
     UInt32 	sndHWGetActiveInputExclusive(void);
@@ -117,21 +117,21 @@ protected:
     IOReturn   	sndHWSetProgOutput(UInt32 outputBits);
     
     IOReturn sndHWSetSystemInputGain(UInt32 leftGain, UInt32 rightGain);
-            // control function
+	// control function
     bool   	sndHWGetSystemMute(void);
     IOReturn  	sndHWSetSystemMute(bool mutestate);
     bool   	sndHWSetSystemVolume(UInt32 leftVolume, UInt32 rightVolume);
     IOReturn   	sndHWSetSystemVolume(UInt32 value);
     IOReturn	sndHWSetPlayThrough(bool playthroughstate);
     
-            //Power Management
+	// Power Management
     IOReturn   	sndHWSetPowerState(IOAudioDevicePowerState theState);
 
-            //Identification
+	// Identification
     UInt32 	sndHWGetType( void );
     UInt32	sndHWGetManufacturer( void );
     
-        //Burgundy soecific routine
+	// Burgundy soecific routine
     void 	DisconnectMixer(UInt32 mixer );
     UInt32	GetPhysicalOutputPort(UInt32 logicalPort );
     UInt32 	GetPhysicalInputPort(UInt32 logicalPort );
@@ -140,10 +140,29 @@ protected:
     void	ReleaseMux(UInt8 mux);
     void	ReserveMux(UInt8 mux, UInt32 physicalInput);
 
-			// User Client calls
-	virtual UInt8	readGPIO (UInt32 selector) {return 0;}
-	virtual void	writeGPIO (UInt32 selector, UInt8 data) {return;}
-	virtual Boolean	getGPIOActiveState (UInt32 gpioSelector) {return 0;}
+	// User Client calls
+	virtual UInt8		readGPIO (UInt32 selector) {return 0;}
+	virtual void		writeGPIO (UInt32 selector, UInt8 data) {return;}
+	virtual Boolean		getGPIOActiveState (UInt32 gpioSelector) {return 0;}
+	virtual void		setGPIOActiveState ( UInt32 selector, UInt8 gpioActiveState ) {return;}
+	virtual Boolean		checkGpioAvailable ( UInt32 selector ) {return 0;}
+	virtual IOReturn	readHWReg32 ( UInt32 selector, UInt32 * registerData ) {return kIOReturnUnsupported;}
+	virtual IOReturn	writeHWReg32 ( UInt32 selector, UInt32 registerData ) {return kIOReturnUnsupported;}
+	virtual IOReturn	readCodecReg ( UInt32 selector, void * registerData,  UInt32 * registerDataSize ) {return kIOReturnUnsupported;}
+	virtual IOReturn	writeCodecReg ( UInt32 selector, void * registerData ) {return kIOReturnUnsupported;}
+	virtual IOReturn	readSpkrID ( UInt32 selector, UInt32 * speakerIDPtr );
+	virtual IOReturn	getCodecRegSize ( UInt32 selector, UInt32 * codecRegSizePtr ) {return kIOReturnUnsupported;}
+	virtual	IOReturn	getVolumePRAM ( UInt32 * pramDataPtr ) {return kIOReturnUnsupported;}
+	virtual IOReturn	getDmaState ( UInt32 * dmaStatePtr ) {return kIOReturnUnsupported;}
+	virtual IOReturn	getStreamFormat ( IOAudioStreamFormat * streamFormatPtr ) {return kIOReturnUnsupported;}
+	virtual IOReturn	readPowerState ( UInt32 selector, IOAudioDevicePowerState * powerState ) {return kIOReturnUnsupported;}
+	virtual IOReturn	setPowerState ( UInt32 selector, IOAudioDevicePowerState powerState ) {return kIOReturnUnsupported;}
+	virtual IOReturn	setBiquadCoefficients ( UInt32 selector, void * biquadCoefficients, UInt32 coefficientSize ) {return kIOReturnUnsupported;}
+	virtual IOReturn	getBiquadInformation ( UInt32 scalarArg1, void * outStructPtr, IOByteCount * outStructSizePtr ) {return kIOReturnUnsupported;}
+	virtual IOReturn	getProcessingParameters ( UInt32 scalarArg1, void * outStructPtr, IOByteCount * outStructSizePtr )  {return kIOReturnUnsupported;}
+	virtual IOReturn	setProcessingParameters ( UInt32 scalarArg1, void * inStructPtr, UInt32 inStructSize ) {return kIOReturnUnsupported;}
+	virtual	IOReturn	invokeInternalFunction ( UInt32 functionSelector, void * inData ) { return kIOReturnUnsupported; }
+
 };
 
 #endif /* !_APPLEBURGUNDYAUDIO_H */

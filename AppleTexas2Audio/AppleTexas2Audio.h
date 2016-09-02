@@ -37,6 +37,9 @@
 #include "AppleOnboardAudio.h"
 #include "Texas2_hw.h"
 
+//#define kLOG_EQ_TABLE_TRAVERSE		//	un-comment this to log GetCustomEQCoefficients table traverse
+//#define kDEBUG_GPIO					//	un-comment this to log GPIO transactions
+
 class IOInterruptEventSource;
 class IORegistryEntry;
 
@@ -54,9 +57,9 @@ struct IODBDMADescriptor;
 #define kSpeakerConnectError		"SpeakerConnectError"
 
 enum  {
-	kMaximumVolume = 140,
+	kMaximumVolume = 141,
 	kMinimumVolume = 0,
-	kInitialVolume = 100
+	kInitialVolume = 101
 };
 
 typedef Boolean GpioActiveState;
@@ -102,27 +105,31 @@ class AppleTexas2Audio : public AppleOnboardAudio
     friend class AudioHardwareMux;
 
 protected:
-	UInt32					gVolLeft;
-	UInt32					gVolRight;
 	SInt32					minVolume;
 	SInt32					maxVolume;
 	Boolean					gVolMuteActive;
 	Boolean					mCanPollStatus;
 	IOInterruptEventSource *headphoneIntEventSource;
+	IOInterruptEventSource *lineOutIntEventSource;						//	[2788199]
 	IOInterruptEventSource *dallasIntEventSource;
 	Boolean					hasVideo;									// TRUE if this hardware has video out its headphone jack
 	Boolean					hasSerial;									// TRUE if this hardware has a serial connection on its headphone jack
 	Boolean					headphonesActive;
+	Boolean					lineOutActive;
 	Boolean					headphonesConnected;
+	Boolean					lineOutConnected;							//	[2788199]
 	Boolean					dallasSpeakersConnected;
 	DRCInfo					drc;										// dynamic range compression info
 	UInt32					layoutID;									// The ID of the machine we're running on
+	UInt32					familyID;									// The ID of the speakers that are plugged in (required for rom verification)
+	UInt32					speakerID;									// The ID of the speakers that are plugged in
 	GpioPtr					hwResetGpio;
 	GpioPtr					hdpnMuteGpio;
 	GpioPtr					ampMuteGpio;
 	GpioPtr					lineInExtIntGpio;							//	[叩ew包
 	GpioPtr					lineOutExtIntGpio;							//	[叩ew包
 	GpioPtr					lineOutMuteGpio;							//	[叩ew包
+	GpioPtr					masterMuteGpio;								//	[2933090]
 	GpioPtr					headphoneExtIntGpio;
 	GpioPtr					dallasExtIntGpio;
 	GpioActiveState			hwResetActiveState;							//	indicates asserted state (i.e. '0' or '1')
@@ -133,6 +140,8 @@ protected:
 	GpioActiveState			lineInExtIntActiveState;					//	indicates asserted state (i.e. '0' or '1')	[叩ew包
 	GpioActiveState			lineOutExtIntActiveState;					//	indicates asserted state (i.e. '0' or '1')	[叩ew包
 	GpioActiveState			lineOutMuteActiveState;						//	indicates asserted state (i.e. '0' or '1')	[叩ew包
+	GpioActiveState			masterMuteActiveState;						//	indicates asserted state (i.e. '0' or '1')	[2933090]
+	UInt32					detectCollection;							//	[2878119]
 	UInt8					DEQAddress;									// Address for i2c Texas2
 	Texas2_ShadowReg		shadowTexas2Regs;							// write through shadow registers for Texas2
 	Boolean					semaphores;
@@ -147,8 +156,10 @@ protected:
 	IODeviceMemory *		lineInExtIntGpioMem;						// Have to free this in free()	[叩ew包
 	IODeviceMemory *		lineOutExtIntGpioMem;						// Have to free this in free()	[叩ew包
 	IODeviceMemory *		lineOutMuteGpioMem;							// Have to free this in free()	[叩ew包
+	IODeviceMemory *		masterMuteGpioMem;							// Have to free this in free()	[2933090]
 	UInt32					i2sSerialFormat;
 	IOService *				headphoneIntProvider;
+	IOService *				lineOutIntProvider;							//	[2788199]
 	IOService *				dallasIntProvider;
 	const OSSymbol *		gAppleAudioVideoJackStateKey;
 	const OSSymbol *		gAppleAudioSerialJackStateKey;
@@ -160,6 +171,10 @@ protected:
 	UInt64					savedNanos; 
 	Boolean					speakerConnectFailed;
     UInt32					activeOutput;								//	[2855519]
+	Boolean					useMasterVolumeControl;
+	UInt32					lastLeftVol;
+	UInt32					lastRightVol;
+	Boolean					dallasSpeakersProbed;						// So we only probe the speakers once when they are plugged in
 	Boolean					hasANDedReset;								//	[2855519]
 
 	// information specific to the chip
@@ -220,24 +235,24 @@ public:
     virtual  IOReturn   sndHWSetProgOutput(UInt32 outputBits);
 
 private:
-    //These will probably change when we have a general method
-    //to verify the Detects.  Wait til we figure out how to do 
+    // These will probably change when we have a general method
+    // to verify the Detects.  Wait til we figure out how to do 
     // this with interrupts and then make that generic.
     virtual void 		checkStatus(bool force);
     static void 		timerCallback(OSObject *target, IOAudioDevice *device);
 
 	Boolean				IsHeadphoneConnected (void);
+	Boolean				IsLineOutConnected (void);
 	Boolean				IsSpeakerConnected (void);
+	UInt32				ParseDetectCollection ( void );
 
 public:	
+	void RealLineOutInterruptHandler (IOInterruptEventSource *source, int count);	//	[2878119]
 	void RealHeadphoneInterruptHandler (IOInterruptEventSource *source, int count);
 	void RealDallasInterruptHandler (IOInterruptEventSource *source, int count);
 
 	virtual IOReturn performDeviceWake ();
 	virtual IOReturn performDeviceSleep ();
-
-	virtual IOReturn setModemSound(bool state);
-//	virtual IOReturn callPlatformFunction( const OSSymbol *functionName , bool waitForFunction, void *param1, void *param2, void *param3, void *param4 );
 
 protected:
 	// activation functions
@@ -246,6 +261,7 @@ protected:
 	IOReturn	SetAmplifierMuteState (UInt32 ampID, Boolean muteState);
     IOReturn	SelectHeadphoneAmplifier( void );
     IOReturn	SelectLineOutAmplifier( void );
+    IOReturn	SelectMasterMuteAmplifier( void );
     IOReturn	SelectSpeakerAmplifier( void );
     IOReturn	SetMixerState ( UInt32 mixerState );							//	[2855519]
 	IOReturn	InitEQSerialMode (UInt32 mode, Boolean restoreOnNormal);
@@ -271,6 +287,7 @@ protected:
 	IOReturn	SndHWSetOutputBiquad( UInt32 streamID, UInt32 biquadRefNum, FourDotTwenty *biquadCoefficients );
 	IOReturn	SndHWSetOutputBiquadGroup( UInt32 biquadFilterCount, FourDotTwenty *biquadCoefficients );
 	IOReturn	SetOutputBiquadCoefficients (UInt32 streamID, UInt32 biquadRefNum, UInt8 *biquadCoefficients);
+	void		SelectOutputAndLoadEQ ( void );
 	IOReturn	SetActiveOutput (UInt32 output, Boolean touchBiquad);
 	IOReturn	SetAnalogPowerDownMode( UInt8 mode );
 	IOReturn	ToggleAnalogPowerDownWake( void );
@@ -280,12 +297,19 @@ protected:
 	Boolean		HasANDedReset (void);
 	Boolean		HasInput (void);
 
+	Boolean		GpioGetActiveState (UInt8* gpioAddress);
+	void		GpioSetActiveState (UInt8* gpioAddress, UInt8 gpioActiveState);
+	Boolean		gpioCheckExists (UInt8* gpioAddress);
+
     static bool interruptFilter (OSObject *, IOFilterInterruptEventSource *);
     static void dallasInterruptHandler (OSObject *owner, IOInterruptEventSource *source, int count);
 	static bool	DallasDriverPublished (AppleTexas2Audio * appleTexas2Audio, void * refCon, IOService * newService);
 	static void DallasInterruptHandlerTimer (OSObject *owner, IOTimerEventSource *sender);
 	static void DisplaySpeakersNotFullyConnected (OSObject *owner, IOTimerEventSource *sender);
 	static void headphoneInterruptHandler(OSObject *owner, IOInterruptEventSource *source, int count);
+	static void lineOutInterruptHandler(OSObject *owner, IOInterruptEventSource *source, int count);
+
+	void SetOutputSelectorCurrentSelection (void);
 
 	// This provides access to the Texas2 registers:
 	PPCI2CInterface *interface;
@@ -314,16 +338,25 @@ protected:
 
 	inline UInt32 ReadWordLittleEndian(void *address, UInt32 offset);
 	inline void WriteWordLittleEndian(void *address, UInt32 offset, UInt32 value);
+
 	inline void I2SSetSerialFormatReg(UInt32 value);
 	inline UInt32 I2SGetSerialFormatReg(void);
 	inline void I2SSetDataWordSizeReg(UInt32 value);
 	inline UInt32 I2SGetDataWordSizeReg(void);
+
+	inline void I2S1SetSerialFormatReg(UInt32 value);
+	inline UInt32 I2S1GetSerialFormatReg(void);
+	inline void I2S1SetDataWordSizeReg(UInt32 value);
+	inline UInt32 I2S1GetDataWordSizeReg(void);
+
 	inline void Fcr1SetReg(UInt32 value);
 	inline UInt32 Fcr1GetReg(void);
 	inline void Fcr3SetReg(UInt32 value);
 	inline UInt32 Fcr3GetReg(void);
 
 	inline UInt32 I2SGetIntCtlReg();
+	inline UInt32 I2S1GetIntCtlReg();
+	
 	bool setSampleParameters(UInt32 sampleRate, UInt32 mclkToFsRatio);
 	void setSerialFormatRegister(ClockSource clockSource, UInt32 mclkDivisor, UInt32 sclkDivisor, SoundFormat serialFormat);
 	bool setHWSampleRate(UInt rate);
@@ -340,9 +373,28 @@ protected:
 	UInt8	GpioReadByte( UInt8* gpioAddress );
 
 			// User Client calls
-	virtual UInt8	readGPIO (UInt32 selector);
-	virtual void	writeGPIO (UInt32 selector, UInt8 data);
-	virtual Boolean	getGPIOActiveState (UInt32 gpioSelector);
+	virtual UInt8		readGPIO (UInt32 selector);
+	virtual void		writeGPIO (UInt32 selector, UInt8 data);
+	virtual Boolean		getGPIOActiveState (UInt32 gpioSelector);
+	virtual void		setGPIOActiveState ( UInt32 selector, UInt8 gpioActiveState );
+	virtual Boolean		checkGpioAvailable ( UInt32 selector );
+	virtual IOReturn	readHWReg32 ( UInt32 selector, UInt32 * registerData );
+	virtual IOReturn	writeHWReg32 ( UInt32 selector, UInt32 registerData );
+	virtual IOReturn	readCodecReg ( UInt32 selector, void * registerData,  UInt32 * registerDataSize );
+	virtual IOReturn	writeCodecReg ( UInt32 selector, void * registerData );
+	virtual IOReturn	readSpkrID ( UInt32 selector, UInt32 * speakerIDPtr );
+	virtual IOReturn	getCodecRegSize ( UInt32 selector, UInt32 * codecRegSizePtr );
+	virtual	IOReturn	AppleTexas2Audio::getVolumePRAM ( UInt32 * pramDataPtr );
+	virtual IOReturn	getDmaState ( UInt32 * dmaStatePtr );
+	virtual IOReturn	getStreamFormat ( IOAudioStreamFormat * streamFormatPtr );
+	virtual IOReturn	readPowerState ( UInt32 selector, IOAudioDevicePowerState * powerState );
+	virtual IOReturn	setPowerState ( UInt32 selector, IOAudioDevicePowerState powerState );
+	virtual IOReturn	setBiquadCoefficients ( UInt32 selector, void * biquadCoefficients, UInt32 coefficientSize );
+	virtual IOReturn	getBiquadInformation ( UInt32 scalarArg1, void * outStructPtr, IOByteCount * outStructSizePtr );
+	virtual IOReturn	getProcessingParameters ( UInt32 scalarArg1, void * outStructPtr, IOByteCount * outStructSizePtr );
+	virtual IOReturn	setProcessingParameters ( UInt32 scalarArg1, void * inStructPtr, UInt32 inStructSize );
+	virtual	IOReturn	invokeInternalFunction ( UInt32 functionSelector, void * inData );
+
 };
 
 #endif /* _APPLETEXAS2AUDIO_H */

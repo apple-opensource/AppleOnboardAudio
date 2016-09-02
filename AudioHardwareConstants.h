@@ -73,6 +73,7 @@
 #define kPortConnectionPropName 	"port-connection"
 #define kPortTypePropName       	"port-type"
 #define kNameIDPropName         	"name-id"
+#define kZeroGainPropName         	"zero-gain"	// aml 4.26.02
 
 #define kOutputPortObjName			"OutputPort"
 #define kOutputEQPortObjName		"OutputEQPort"
@@ -105,6 +106,10 @@
 #define kSourceMapPropName      	"source-map"
 #define kSourceMapCountPropName 	"source-map-count"
 
+#ifndef	kDeviceFamilySpeaker
+#define	kDeviceFamilySpeaker		1
+#endif
+
 // Machine layout constants. All NewWorld machines have a device-id property
 // matching one of these layout constants for specifying the sound hardware layout.
 enum {
@@ -135,7 +140,10 @@ enum {
 	layoutP92					=	25,
 	layoutP59					=	26,
 	layoutP57b					=	27,
-	layoutP73					=	28
+	layoutP73					=	28,
+	layoutP79					=	29,
+	layoutP84					=	30,
+	layoutP99					=	31
 };
 
 // Hardware type 
@@ -149,7 +157,7 @@ enum{
 };
 
 // Kind of devices
-enum {
+enum AudioPortTypes {
     kSndHWInternalSpeaker	=	0x00000001,		// internal speaker present on CPU
     kSndHWCPUHeadphone		=	0x00000002,		// headphones inserted into CPU headphone port
     kSndHWCPUExternalSpeaker	=	0x00000004,		// external speakers (or headphones) inserted in CPU output port
@@ -161,9 +169,8 @@ enum {
     kSndHWModemRingDetect	=	0x00000100,		// modem ring detect
     kSndHWModemLineCurrent	=	0x00000200,		// modem line current
     kSndHWModemESquared		=	0x00000400,		// modem E squared
-	kSndHWLineInput			=	0x00000800,		//	line input device present
-	kSndHWLineOutput		=	0x00001000,		//	line output device present
-
+	kSndHWLineInput				=	0x00000800,		// line input device present
+	kSndHWLineOutput			=	0x00001000,		// line output device present
     kSndHWInputDevices		=	0x000000B0,		// mask to get input devices (excluding modems)
     kSndHWAllDevices		=	0xFFFFFFFF		// all available devices
     
@@ -178,9 +185,8 @@ enum {
     kSndHWTypeUSB				=	0x00000004,		// USB codec on a wire...
     kSndHWTypeDaca				= 	0x00000005,		// DAC3550A
     kSndHWTypeDigitalSnd		=	0x00000006,		// DigitalSnd virtual HW
-    kSndHWTypeTumbler			=	0x00000007,		// Tumbler I2S with Equalizer & Dallas ID thing...
+    kSndHWTypeTumbler			=	0x00000007,		// Texas I2S with Equalizer & Dallas ID thing...
 	kSndHWTypeTexas2			=	0x00000008,		// Texas2 I2s with Equalizer & Dallas ID thing...
-
     kSndHWManfUnknown			=	0x00000000,		// unknown manufacturer (error during read)
     kSndHWManfCrystal			=	0x00000001,		// manufactured by crystal
     kSndHWManfNational			=	0x00000002,		// manufactured by national
@@ -196,7 +202,6 @@ enum {
 	kSndHWOutput3				=	3,				// output 3
 	kSndHWOutput4				=	4,				// output 4
 	kSndHWOutput5				=	5,				// output 5
-	
 	kSndHWOutputNone			=	0				// no output
 };
 
@@ -235,6 +240,8 @@ enum {
   kSndHWInputNone               = 0     /* no input*/
 };
 
+//	WARNING:	Do not change the values of the following enumerations.  Changes to
+//				the enumerations will cause the 'Audio Hardware Utility' to fail.
 enum GpioAddressSelector {
 	kHeadphoneMuteSel			=	'hmut',
 	kHeadphoneDetecteSel		=	'hcon',
@@ -242,10 +249,38 @@ enum GpioAddressSelector {
 	kSpeakerDetectSel			=	'dlas',
 	kCodecResetSel				=	'rset',
 	kLineInDetectSel			=	'ldet',
-	kLineOutMuteRefSel			=	'lmut',
-	kLineOutDetectSel			=	'lcon'
+	kLineOutMuteSel				=	'lmut',
+	kLineOutDetectSel			=	'lcon',
+	kMasterMuteSel				=	'mstr'
+};
+//	END WARNING:
+
+enum Hardware32RegisterSelectors {
+    kI2sSerialFormatRegisterSelector	=	0,			/*	I2S0 bus implemenations				*/
+    kI2sDataWordFormatRegisterSelector	=	1,			/*	I2S0 bus implemenations				*/
+    kFeatureControlRegister1Selector	=	2,			/*	DAV bus & I2S bus implemenations	*/
+    kFeatureControlRegister3Selector	=	3,			/*	DAV bus & I2S bus implemenations	*/
+    kCodecControlRegisterSelector		=	4,			/*	DAV bus implemenations				*/
+    kCodecStatusRegisterSelector		=	5,			/*	DAV bus implemenations				*/
+    kI2s1SerialFormatRegisterSelector	=	6,			/*	I2S1 bus implemenations				*/
+    kI2s1DataWordFormatRegisterSelector	=	7			/*	I2S1 bus implemenations				*/
 };
 
+enum CodecRegisterUserClientWidth {
+	kMaxCodecStructureSize				=	512,		/*	Codec READ transactions copy the entire register cache in a single transaction!	*/
+	kMaxCodecRegisterWidth				=	 16,		/*	Codec WRITE transactions address only a single register	*/
+	kMaxBiquadWidth						=	512,
+	kMaxBiquadInfoSize					=	256,
+	kMaxProcessingParamSize				=	512			/*	used with getProcessingParams or setProcessingParams	*/
+};
+
+enum speakerIDBitAddresses {
+	kHeadphone_Connected	=	25,
+	kSpeakerID_Connected	=	24,
+	kSpeakerID_Family		=	16,
+	kSpeakerID_Type			=	 8,
+	kSpeakerID_SubType		=	 0
+};
 
 // Shift value to identify the control IDs
 #define DETECTSHIFT 1000
@@ -258,13 +293,23 @@ enum{
     kMaximumPRAMVolume 	= 7,
     kMinimumPRAMVolume	= 0,
     KNumPramVolumeSteps	= (kMaximumPRAMVolume- kMinimumPRAMVolume+1),
-    kPRamVolumeAddr	= 8,
+    kPRamVolumeAddr		= 8,
     
-    kDefaultVolume	= 0x006E006E,
+    kDefaultVolume		= 0x006E006E,
     kInvalidVolumeMask	= 0xFE00FE00
     
 };
 
 typedef UInt32 sndHWDeviceSpec;
+
+typedef struct {
+	UInt32			numBiquad;
+	UInt32			numCoefficientsPerBiquad;
+	UInt32			biquadCoefficientBitWidth;
+	UInt32			coefficientIntegerBitWidth;
+	UInt32			coefficientFractionBitWidth;
+	UInt32			coefficientOrder[1];			//	this array is of size 'numCoefficientsPerBiquad' and holds OSTypes describing the coefficient
+} BiquadInfoList;
+typedef BiquadInfoList * BiquadInfoListPtr;
 
 #endif
